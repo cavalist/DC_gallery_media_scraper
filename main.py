@@ -8,6 +8,7 @@ import concurrent.futures
 import queue
 import time
 from datetime import datetime, timedelta
+import os
 
 import requests
 from bs4 import BeautifulSoup
@@ -360,7 +361,19 @@ class Downloader:
                         raise ValueError
 
                     save_file_name = f"{sl_title}_{written_time}_{i:03d}{'.' + extension if extension else ''}"
-                    save_path = f"{SAVE_DIR + '/' if SAVE_DIR else 'images/'}{sl_title}_{written_time}_{i:03d}{'.' + extension if extension else ''}"
+                    save_dir = ""
+                    if SAVE_DIR:
+                        if not os.path.exists(SAVE_DIR):
+                            logging.warning("경로가 존재하지 않습니다.")
+                            raise ValueError
+                        save_dir = SAVE_DIR
+                    else:
+                        if os.path.exists("./images"):
+                            pass
+                        else:
+                            os.mkdir("./images")
+                        save_dir = "./images"
+                    save_path = f"{os.path.join(save_dir, save_file_name)}"
                     with open(save_path, "wb") as f:
                         f.write(media_response.content)
                     logging.info(f"DOWN THREAD: {save_file_name} 다운로드")
