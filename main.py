@@ -4,7 +4,12 @@
 쓰레드 * 1: 다운로드
 """
 
+import sys
+print(sys.version)
+print(sys.executable)
+
 import concurrent.futures
+
 import queue
 import time
 from datetime import datetime, timedelta
@@ -18,16 +23,16 @@ from openpyxl import load_workbook
 
 import logging
 logging.basicConfig(level=logging.INFO)
+dirname = os.path.dirname(__file__)
 
 COLLECTOR_THREADS_NUM = 3
 POST_WATCH_RANGE = 10
 GALL_URL = "https://gall.dcinside.com/board/lists/?id=baseball_new10"
-KOREAN_IPS_XLSX = "KR_NIPLIST_(2021.07.10).xlsx"
+KOREAN_IPS_XLSX = os.path.join(dirname, "KR_NIPLIST_(2021.07.10).xlsx")
 WRITER_TYPES = ["해외유동", "국내유동"]  # "국내유동", "해외유동", "고닉"
-SAVE_DIR = "./images"
+SAVE_DIR = "E:/dc_scraper_down"
 SHUTDOWN_TIME = ""  # [n.year, n.month, n.day, n.hour, n.minute, n.second]
 SHUTDOWN_TIME_DELTA = timedelta(seconds=30)
-
 
 class ShutdownTimer:
     def __init__(self, *args, t_delta=None):
@@ -209,7 +214,7 @@ class PostsCollector:
                         and writer["type"] in WRITER_TYPES:
                     post_to_read = {
                         "title": post_data_getter.get_post_title(),  # text, url
-                        "writer": writer  # ip, nick
+                        "writer": writer  # ip, nick, type
                     }
                     logging.info(f"POST THREAD: PUT: {post_to_read['title']['text']}")
                     self.posts_queue.put(post_to_read)
@@ -340,9 +345,17 @@ class Downloader:
                 rq_headers = post["src_rq_headers"]
 
                 full_title = post["title"]["text"]
-                rp_title = replace_forbbiden_char(full_title)
-                sl_title = rp_title[0:5] if len(rp_title) > 5 else rp_title
+                sl_title = full_title[0:5] if len(full_title) > 5 else full_title
+                rp_title = replace_forbbiden_char(sl_title)
                 written_time = post["written_time"].replace(":", ".")
+
+
+                user_info = ""
+                if post["writer"]["type"] == "고닉":
+                    user_info = post["writer"]["nick"]
+                else:
+                    user_info = f"{post['writer']['nick']}({post['writer']['ip']})[{post['writer']['type']}]"
+                user_info = replace_forbbiden_char(user_info)
                 for i, media_src in enumerate(media_srcs):
                     media_response = requests.get(media_src, headers=rq_headers)
 
@@ -360,7 +373,7 @@ class Downloader:
                         logging.warning(f"src: {media_src}")
                         raise ValueError
 
-                    save_file_name = f"{sl_title}_{written_time}_{i:03d}{'.' + extension if extension else ''}"
+                    save_file_name = f"{rp_title}_{user_info}_{written_time}_{i:03d}{'.' + extension if extension else ''}"
                     save_dir = ""
                     if SAVE_DIR:
                         if not os.path.exists(SAVE_DIR):
@@ -368,16 +381,19 @@ class Downloader:
                             raise ValueError
                         save_dir = SAVE_DIR
                     else:
-                        if os.path.exists("./images"):
+                        if os.path.exists(os.path.join(dirname, "images")):
                             pass
                         else:
-                            os.mkdir("./images")
-                        save_dir = "./images"
+                            os.mkdir(os.path.join(dirname, "images"))
+                        save_dir = os.path.join(dirname, "images")
                     save_path = f"{os.path.join(save_dir, save_file_name)}"
-                    with open(save_path, "wb") as f:
-                        f.write(media_response.content)
-                    logging.info(f"DOWN THREAD: {save_file_name} 다운로드")
-                    self.download_cnt += 1
+                    try:
+                        with open(save_path, "wb") as f:
+                            f.write(media_response.content)
+                        logging.info(f"DOWN THREAD: {save_file_name} 다운로드")
+                        self.download_cnt += 1
+                    except OSError:
+                        logging.warning("잘못된 파일명")
                     time.sleep(1)
 
                 logging.info(f"DOWN THREAD: 누적 다운로드 수: {self.download_cnt}, 남은 다운로드 수: {self.srcs_queue.qsize()}")
