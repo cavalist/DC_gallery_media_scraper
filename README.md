@@ -1,2 +1,2 @@
 # DC_gallery_media_scraper
-Scrapes media in a dcinside gallery with refreshing the posts list.
+Scrapes media in a dcinside gallery while refreshing the posts list.
